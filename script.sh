@@ -145,6 +145,16 @@ kms "aead" {
 }
 EOF
 
+# Bootstrap boundary controller
+cat << EOF > recovery.hcl
+kms "aead" {
+  purpose = "recovery"
+  aead_type = "aes-gcm"
+  key = "JehZ4hnGr2QA1i4W94jzPlLOFi6LcAdCRsI73Quqd7M="
+  key_id = "global_recovery"
+}
+EOF
+
 # Initialize Boundary database
 docker run --rm \
   --network host \
@@ -155,31 +165,101 @@ docker run --rm \
   boundary database init -config=/boundary/controller.hcl
 
 # Run Boundary Controller in Docker
-# docker run --rm  \
-#   --name boundary-controller \
-#   --network host \
-#   --cap-add IPC_LOCK \
-#   -v "$(pwd)/controller.hcl":/boundary/controller.hcl \
-#   -e "BOUNDARY_POSTGRES_URL=postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable" \
-#   hashicorp/boundary:latest \
-#   boundary server -config=/boundary/controller.hcl
-
-docker run \
+docker run -d  \
   --name boundary-controller \
   --network host \
   --cap-add IPC_LOCK \
-  -p 9200:9200 \
-  -p 9201:9201 \
-  -p 9202:9202 \
   -v "$(pwd)/controller.hcl":/boundary/controller.hcl \
+  -v "$(pwd)/recovery.hcl":/boundary/recovery.hcl \
   -e "BOUNDARY_POSTGRES_URL=postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable" \
+  -e "BOUNDARY_PASSWORD=mypassword" \
   hashicorp/boundary:latest \
   boundary server -config=/boundary/controller.hcl
+
+alias boundary="docker exec -it boundary-controller boundary"
 
 # Run Boundary Worker in Docker
 docker run -d \
   --name boundary-worker \
   --network host \
+  --cap-add IPC_LOCK \
   -v "$(pwd)/worker.hcl":/boundary/worker.hcl \
   hashicorp/boundary:latest \
   boundary server -config=/boundary/worker.hcl
+
+# Create scope and capture the ID
+export ORG_NAME="org1"
+export SCOPE_ID=$(boundary scopes create \
+  -name $ORG_NAME \
+  -scope-id 'global' \
+  -recovery-config /boundary/recovery.hcl \
+  -skip-admin-role-creation \
+  -skip-default-role-creation \
+  -format json | jq -r '.item.id')
+
+echo "Scope ID is: $SCOPE_ID"
+
+# create an auth method
+export AUTH_METHOD_NAME="password"
+export AUTH_METHOD_ID=$(boundary auth-methods create password \
+  -recovery-config /boundary/recovery.hcl \
+  -scope-id $SCOPE_ID \
+  -name $AUTH_METHOD_NAME \
+  -description 'My password auth method' \
+  -format json | jq -r '.item.id')
+
+echo "Auth Method ID is: $AUTH_METHOD_ID"
+
+# create a login account
+export ADMIN_UID="orgadmin"
+export ACCOUNT_ID=$(boundary accounts create password \
+  -recovery-config /boundary/recovery.hcl \
+  -login-name $ADMIN_UID\
+  -password env://BOUNDARY_PASSWORD \
+  -auth-method-id "$AUTH_METHOD_ID" \
+  -format json | jq -r '.item.id')
+
+echo "Account ID is: $ACCOUNT_ID"
+
+# Create a user
+export USER_ACCT_ID=$(boundary users create -scope-id $SCOPE_ID \
+  -recovery-config /boundary/recovery.hcl \
+  -name "demouser" \
+  -description "My user!" \
+  -format json | jq -r '.item.id')
+
+echo "User Account ID is: $USER_ACCT_ID"
+
+boundary users add-accounts \
+  -recovery-config /boundary/recovery.hcl \
+  -id $USER_ACCT_ID \
+  -account $ACCOUNT_ID
+
+# create org admin role for admin user
+export ROLE_ID=$(boundary roles create -name 'org_admin3' \
+  -recovery-config /boundary/recovery.hcl \
+  -scope-id 'global' \
+  -format json | jq -r '.item.id')
+
+echo "Role ID is: $ROLE_ID"
+
+# grant the role to the scope
+export GRANT_SCOPE_ID=$(boundary roles set-grant-scopes \
+  -recovery-config /boundary/recovery.hcl \
+  -id $ROLE_ID \
+  -grant-scope-id $SCOPE_ID \
+  -format json | jq -r '.item.id')
+
+echo "Grant Scope ID is: $GRANT_SCOPE_ID"
+
+# add grants to the role
+boundary roles add-grants -id $ROLE_ID \
+  -recovery-config /boundary/recovery.hcl \
+  -grant 'ids=*;type=*;actions=*' \ 
+  -format json | jq -r '.item.id'
+
+# add principle to the role and ACCT
+boundary roles add-principals -id $ROLE_ID \
+  -recovery-config /boundary/recovery.hcl \
+  -principal $USER_ACCT_ID
+
