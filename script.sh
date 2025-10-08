@@ -18,7 +18,9 @@ export MINIO_ROOT_USER=minioadmin
 export MINIO_ROOT_PASSWORD=minioadmin123
 export ORG_NAME="org"
 export AUTH_METHOD_NAME="password"
-export ADMIN_LOGIN_UID="orgadmin"
+export ADMIN_LOGIN_UID="admin"
+export ROLE_NAME="orgadmin"
+export ADMIN_LOGIN_PWD="mypassword"
 
 # Setup PostgresSQl Database
 setupdb() {
@@ -62,7 +64,7 @@ setupdb() {
     # list users and roles and verify that the role is created
     psqld -U $PG_ADMIN_NAME -c '\x auto;' -c "\dg"
 
-    # create database boundary - needed for boundaru
+    # create database boundary - needed for boundary
     psqld -U $PG_ADMIN_NAME -c "CREATE DATABASE boundary;"
 
     # Verify database was created
@@ -187,7 +189,7 @@ docker run -d  \
   -v "$(pwd)/controller.hcl":/boundary/controller.hcl \
   -v "$(pwd)/recovery.hcl":/boundary/recovery.hcl \
   -e "BOUNDARY_POSTGRES_URL=postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable" \
-  -e "BOUNDARY_PASSWORD=mypassword" \
+  -e "BOUNDARY_PASSWORD=$ADMIN_LOGIN_PWD" \
   hashicorp/boundary:latest \
   boundary server -config=/boundary/controller.hcl
 
@@ -208,10 +210,11 @@ docker run -d  \
 initboundarycontroller() {
 
   boundary() {
-        docker exec -i boundary-controller boundary "$@"
+        docker exec -it boundary-controller boundary "$@"
   }
   echo "Initializing Boundary Controller"
-   # Create scope and capture the ID  
+  
+  # Create "org" scope and capture the ID  
   export SCOPE_ID=$(boundary scopes create \
     -name $ORG_NAME \
     -scope-id 'global' \
@@ -219,20 +222,26 @@ initboundarycontroller() {
     -skip-admin-role-creation \
     -skip-default-role-creation \
     -format json | jq -r '.item.id')
-
   echo "Scope ID is: $SCOPE_ID"
 
-  # create an auth method
+  #create project
+  # export PROJECT_ID=$(boundary scopes create -name 'project' -scope-id $SCOPE_ID \
+  # -recovery-config /boundary/recovery.hcl \
+  # -skip-admin-role-creation \
+  # -skip-default-role-creation \
+  # -format json | jq -r '.item.id')
+  # echo "Project ID is: $PROJECT_ID"
+
+  # create an auth method in scope global
   export AUTH_METHOD_ID=$(boundary auth-methods create password \
     -recovery-config /boundary/recovery.hcl \
-    -scope-id $SCOPE_ID \
+    -scope-id global \
     -name $AUTH_METHOD_NAME \
     -description 'My password auth method' \
     -format json | jq -r '.item.id')
-
   echo "Auth Method ID is: $AUTH_METHOD_ID"
 
-  # create a login account
+  # Create a login account for the admin user
   export LOGIN_ACCOUNT_ID=$(boundary accounts create password \
     -recovery-config /boundary/recovery.hcl \
     -login-name $ADMIN_LOGIN_UID\
@@ -243,9 +252,9 @@ initboundarycontroller() {
    echo "Login Account ID is: $LOGIN_ACCOUNT_ID"
 
 # Create a user
-  export USER_ID=$(boundary users create -scope-id $SCOPE_ID \
+  export USER_ID=$(boundary users create -scope-id global \
     -recovery-config /boundary/recovery.hcl \
-    -name "demouser" \
+    -name "myuser" \
     -description "My user!" \
     -format json | jq -r '.item.id')
 
@@ -257,8 +266,8 @@ initboundarycontroller() {
     -id $USER_ID \
     -account $LOGIN_ACCOUNT_ID
 
-# create org admin role at the global scope for admin user
-export ROLE_ID=$(boundary roles create -name 'org_admin3' \
+# create admin role at the global scope for admin user
+export ROLE_ID=$(boundary roles create -name $ROLE_NAME \
   -recovery-config /boundary/recovery.hcl \
   -scope-id 'global' \
   -format json | jq -r '.item.id')
@@ -269,7 +278,7 @@ echo "Role ID is: $ROLE_ID"
 export GRANT_SCOPE_ID=$(boundary roles set-grant-scopes \
   -recovery-config /boundary/recovery.hcl \
   -id $ROLE_ID \
-  -grant-scope-id $SCOPE_ID \
+  -grant-scope-id global \
   -format json | jq -r '.item.id')
 
 echo "Grant Scope ID is: $GRANT_SCOPE_ID"
@@ -285,21 +294,120 @@ boundary roles add-principals -id $ROLE_ID \
   -recovery-config /boundary/recovery.hcl \
   -principal $USER_ID
 
-
 # check auth is successful
 echo "Authenticating to Boundary Controller"
+echo "To authenticate to Boundary Controller use the following command:"
+echo "----START AUTH COMMAND----"
+echo "boundary authenticate password -auth-method-id=$AUTH_METHOD_ID -login-name=$ADMIN_LOGIN_UID -password=env://BOUNDARY_PASSWORD"
+echo "----END AUTH COMMAND----"
+# boundary authenticate password \
+#   -auth-method-id=$AUTH_METHOD_ID \
+#   -login-name=$ADMIN_LOGIN_UID \
+#   -password=env://BOUNDARY_PASSWORD \
+#   -format json | jq '.'
+
 boundary authenticate password \
   -auth-method-id=$AUTH_METHOD_ID \
   -login-name=$ADMIN_LOGIN_UID \
   -password=env://BOUNDARY_PASSWORD \
-  -format json 
+  -format json | jq '.'
 }
 
-# calling function
+setupboundaryworker() {
+  echo "Setting up Boundary Worker"
+  # Create Boundary Worker configuration
+sudo cat << EOF > worker.hcl
+listener "tcp" {
+  address = "0.0.0.0:9202"
+  purpose = "proxy"
+  tls_disable = true
+}
+
+worker {
+  name = "boundary-worker-1"
+  description = "Demo Boundary Worker"
+  initial_upstreams = ["127.0.0.1"]
+  public_addr = "127.0.0.1"
+  tags {
+    type = ["worker", "local"]
+  }
+}
+
+kms "aead" {
+  purpose = "worker-auth"
+  aead_type = "aes-gcm"
+  key = "DfvbhCAGba7TvdvpiVrbh2IVTQlhoC7t/RXGvfRJlVI="
+  key_id = "global_root"
+}
+EOF
+
+# Run Boundary Worker in Docker
+docker run -d \
+  --name boundary-worker \
+  --network host \
+  --cap-add IPC_LOCK \
+  -v "$(pwd)/worker.hcl":/boundary/worker.hcl \
+  hashicorp/boundary:latest \
+  boundary server -config=/boundary/worker.hcl
+
+  boundary() {
+        docker exec -it boundary-controller boundary "$@"
+  }
+
+# Get Worker Auth Registration Request
+echo "Waiting for worker auth token..."
+sleep 5
+export WORKER_AUTH_TOKEN=$(docker logs boundary-worker 2>&1 | grep "Worker Auth Registration Request" | sed 's/Worker Auth Registration Request: *//' | xargs)
+
+if [ -z "$WORKER_AUTH_TOKEN" ]; then
+  echo "Failed to get worker auth token. Check worker logs:"
+  docker logs boundary-worker 2>&1 | tail -20
+  exit 1
+fi
+echo "Worker Auth Registration Request is: $WORKER_AUTH_TOKEN"
+
+echo "Checking AUTH_METHOD_ID again: $AUTH_METHOD_ID"
+echo "Checking ADMIN LOGIN UID again: $ADMIN_LOGIN_UID"
+
+export BOUNDARY_TOKEN=$(boundary authenticate password \
+  -auth-method-id="$AUTH_METHOD_ID" \
+  -login-name=$ADMIN_LOGIN_UID \
+  -password=env://BOUNDARY_PASSWORD \
+  -format json | jq  -r '.item.attributes.token')
+
+echo "Boundary Token is: $BOUNDARY_TOKEN"
+
+docker exec -e "WORKER_AUTH_TOKEN=$WORKER_AUTH_TOKEN" -e "BOUNDARY_TOKEN=$BOUNDARY_TOKEN" boundary-worker sh -c '
+  export BOUNDARY_PASSWORD="mypassword"
+  echo "IF FAIL : RUN MANUALLY"
+  echo "export BOUNDARY_TOKEN=$BOUNDARY_TOKEN"
+  echo "export WORKER_AUTH_TOKEN=$WORKER_AUTH_TOKEN"
+
+  boundary workers create worker-led -worker-generated-auth-token "$WORKER_AUTH_TOKEN" -token "env://BOUNDARY_TOKEN"
+'
+
+# export BOUNDARY_TOKEN=$(boundary authenticate password \
+#   -auth-method-id="$AUTH_METHOD_ID" \
+#   -login-name=$ADMIN_LOGIN_UID \
+#   -password=env://BOUNDARY_PASSWORD \
+#   -format json | jq  -r '.item.attributes.token')
+
+
+
+# echo "Boundary Token is: $BOUNDARY_TOKEN"
+
+# # Authentication
+# boundary workers create worker-led -worker-generated-auth-token "$WORKER_AUTH_TOKEN"
+
+# docker exec -it boundary-controller boundary workers create worker-led -token "env://BOUNDARY_TOKEN" -worker-generated-auth-token "pdZ5SAAebKa9DmnokkNu5EuBPe17XuPEimxzwMkactdmR8zy5kNrDJ2tZAWjEpyL9d5v1HLV3v1dXTu8Hm9sXMrLWunf45zUNtkEabAt3WtuMwmszm8oYmYeCCHCSbYgrom7hALSCe2jxmYhunMoJMbuxGRgpAuFxwNzg7yiEX9dJ6zYqXm7d2hHiEKxKQ4wKzpD8M2Gb8NQbzQtbPyiZaSmpVsEBq76SgHAUGzxx9pkFJRXtvRwCWXeW2PRVcZhhj5sbFwfibuf4WpQ9Cv8dHnnwzGnrYZDwpYYU3d"
+
+}
+
 setupdb
 setupminio
 setupboundarycontroller
 initboundarycontroller
+setupboundaryworker
 
 # Add alias to ~/.bashrc for use outside this script
 if ! grep -q "alias psqld=" ~/.bashrc; then
@@ -312,6 +420,12 @@ if ! grep -q "alias boundary=" ~/.bashrc; then
     echo 'alias boundary="docker exec -it boundary-controller boundary"' >> ~/.bashrc
     . ~/.bashrc
     echo "Added boundary alias to ~/.bashrc (available in new terminal sessions)"
+fi
+
+if ! grep -q "alias worker=" ~/.bashrc; then
+    echo 'alias worker="docker exec -it boundary-worker boundary"' >> ~/.bashrc
+    . ~/.bashrc
+    echo "Added worker alias to ~/.bashrc (available in new terminal sessions)"
 fi
 
 
@@ -351,38 +465,6 @@ echo "Boundary Controller AUTH_METHOD_NAME is: $AUTH_METHOD_NAME"
 # echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
 # sudo apt update && sudo apt install boundary
 
-
-# Create Boundary Worker configuration
-sudo cat << EOF > worker.hcl
-listener "tcp" {
-  address = "0.0.0.0:9202"
-  purpose = "proxy"
-  tls_disable = true
-}
-
-worker {
-  name = "boundary-worker-1"
-  description = "Demo Boundary Worker"
-  initial_upstreams = ["127.0.0.1:9201"]
-  public_addr = "127.0.0.1"
-}
-
-kms "aead" {
-  purpose = "worker-auth"
-  aead_type = "aes-gcm"
-  key = "DfvbhCAGba7TvdvpiVrbh2IVTQlhoC7t/RXGvfRJlVI="
-  key_id = "global_root"
-}
-EOF
-
-# Run Boundary Worker in Docker
-docker run -d \
-  --name boundary-worker \
-  --network host \
-  --cap-add IPC_LOCK \
-  -v "$(pwd)/worker.hcl":/boundary/worker.hcl \
-  hashicorp/boundary:latest \
-  boundary server -config=/boundary/worker.hcl
 
 
 
