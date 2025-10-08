@@ -144,6 +144,14 @@ sudo cat << EOF > controller.hcl
       key = "JehZ4hnGr2QA1i4W94jzPlLOFi6LcAdCRsI73Quqd7M="
       key_id = "global_recovery"
     }
+
+    kms "aead" {
+    purpose = "worker-auth"
+    aead_type = "aes-gcm"
+    key = "DfvbhCAGba7TvdvpiVrbh2IVTQlhoC7t/RXGvfRJlVI="
+    key_id = "global_worker-auth"
+}
+
 EOF
 
 # Verify controller.hcl was created
@@ -337,7 +345,7 @@ kms "aead" {
   purpose = "worker-auth"
   aead_type = "aes-gcm"
   key = "DfvbhCAGba7TvdvpiVrbh2IVTQlhoC7t/RXGvfRJlVI="
-  key_id = "global_root"
+  key_id = "global_worker-auth"
 }
 EOF
 
