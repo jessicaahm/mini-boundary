@@ -8,6 +8,7 @@ sudo apt install curl ca-certificates gnupg -y
 sudo apt install docker.io -y
 sudo apt install postgresql-client-common -y
 sudo apt install postgresql-client -y
+sudo apt install ldap-utils -y
 
 # Add current user to docker group
 sudo usermod -aG docker $USER

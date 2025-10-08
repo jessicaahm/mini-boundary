@@ -1,7 +1,7 @@
 # PowerShell Script to Test Active Directory Connection
 # Run this script AFTER the server has rebooted and AD is fully installed
 
-#Requires -RunAsAdministrator
+# Requires -RunAsAdministrator
 
 # Function to log messages
 function Write-Log {

@@ -411,11 +411,20 @@ docker exec -e "WORKER_AUTH_TOKEN=$WORKER_AUTH_TOKEN" -e "BOUNDARY_TOKEN=$BOUNDA
 
 }
 
-setupdb
-setupminio
-setupboundarycontroller
-initboundarycontroller
-setupboundaryworker
+# Set up vault
+setupvault() {
+  echo "Setting up Vault"
+  docker run -d -p 8200:8200 --name vault --cap-add=IPC_LOCK -e 'VAULT_DEV_ROOT_TOKEN_ID=myroot' -e 'VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200' -e 'VAULT_ADDR=http://127.0.0.1:8200' hashicorp/vault
+
+  curl -k http://localhost:8200/v1/sys/health | jq
+}
+
+# setupdb
+# setupminio
+# setupboundarycontroller
+# initboundarycontroller
+# setupboundaryworker
+setupvault
 
 # Add alias to ~/.bashrc for use outside this script
 if ! grep -q "alias psqld=" ~/.bashrc; then
@@ -428,6 +437,12 @@ if ! grep -q "alias boundary=" ~/.bashrc; then
     echo 'alias boundary="docker exec -it boundary-controller boundary"' >> ~/.bashrc
     . ~/.bashrc
     echo "Added boundary alias to ~/.bashrc (available in new terminal sessions)"
+fi
+
+if ! grep -q "alias vault=" ~/.bashrc; then
+    echo 'alias vault="docker exec -it vault vault -dev-tls"' >> ~/.bashrc
+    . ~/.bashrc
+    echo "Added vault alias to ~/.bashrc (available in new terminal sessions)"
 fi
 
 if ! grep -q "alias worker=" ~/.bashrc; then
