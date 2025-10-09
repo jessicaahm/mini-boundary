@@ -10,12 +10,13 @@ export LDAP_GRP_DN="CN=NewGroup,DC=example,DC=local"
 export UPNDOMAIN="example.local"
 export LDAP_USR_DN="CN=Users,DC=example,DC=local"
 # To be updated for boundary setup
-export AUTH_METHOD_ID="ampw_MTQCxmcbA4" 
-export ORG_SCOPE_ID="o_8J6KWBIggQ"
+export AUTH_METHOD_ID="ampw_bT5tL9lq2E" 
+export SCOPE_ID="o_32uhtsgOm5"
+export PROJ_SCOPE="p_gO59FC9lGg"
 export ADMIN_LOGIN_UID="admin"
 export BOUNDARY_ADDR="http://3.239.219.75:9200/"
 export BOUNDARY_PASSWORD="mypassword"
-export CRED_STORE_ID="clvlt_dompUlx0HB"
+# export CRED_STORE_ID="clvlt_dompUlx0HB"
 
 vault() {
     docker exec -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN=myroot vault vault "$@"
@@ -180,30 +181,89 @@ EOF
 
 }
 
-setupboundarytarget() {
+setupvaultcredstore() {
     # setup boundary target to use vault ldap dynamic credential
     echo "setup boundary target to use vault ldap dynamic credential"
 
     #authentication to boundary
-    boundary authenticate password \
-        -auth-method-id=$AUTH_METHOD_ID \
+    export BOUNDARY_TOKEN=$(boundary authenticate password \
+        -auth-method-id="$AUTH_METHOD_ID" \
         -login-name=$ADMIN_LOGIN_UID \
-        -password=env://BOUNDARY_PASSWORD
+        -password=env://BOUNDARY_PASSWORD \
+        -format json | jq  -r '.item.attributes.token')
 
     #To add in script (currently done via console)
-    #1. Create project scope
+
     #2. Create Vault credential Store
     #3. To create target
 
    #create credential store
-   boundary credential-libraries update vault-generic \
-   -id $CRED_STORE_ID \
-   -vault-http-method GET \
-   -vault-path "ldap/creds/readonly" \
-   -credential-mapping-override username_attribute=username \
-   -credential-mapping-override password_attribute=password
+#    boundary credential-libraries update vault-generic \
+#    -id $CRED_STORE_ID \
+#    -vault-http-method GET \
+#    -vault-path "ldap/creds/readonly" \
+#    -credential-mapping-override username_attribute=username \
+#    -credential-mapping-override password_attribute=password
 }
 
-# setupldapsecretengine
-# setupldapauthengine
-# setupboundarytarget
+setuprecording() {
+    echo "setup session recording store"
+    # Setup MinIO S3-Compatible server
+    mc alias set myminio http://localhost:9000 minioadmin minioadmin123
+
+    # Create user
+    mc admin user add myminio boundary $BOUNDARY_PASSWORD
+    mc admin user list myminio
+
+    # Step 1: Create MinIO Access Keys
+    OUTPUT=$(mc admin user svcacct add myminio minioadmin --json)
+    echo "$OUTPUT"
+    # ACCESS_KEY=$(echo "$OUTPUT" | jq -r '.accessKey')
+    # SECRET_KEY=$(echo "$OUTPUT" | jq -r '.secretKey')
+
+#  "status": "success",
+#  "accessKey": "9ULVDQVNTAWAD1I8LW2I",
+#  "secretKey": "SDNyyQ81Ee7+uOQp0N3tPQoSPuv+pkzxhgnb70Fl",
+#  "accountStatus": "enabled",
+#  "expiration": "1970-01-01T00:00:00Z"
+# }')
+
+    export ACCESS_KEY="1WRHOAAD7WH7U1PO89RS"
+    export SECRET_KEY="6TInONmfHBA0T+pebGhmLrVKKmy1ahDWt4BsD0w1"
+
+    # Attach policy
+    mc admin policy attach myminio readwrite --user boundary
+
+    # Step 2: Create a new bucket named "boundary-recordings"
+    mc mb boundary/boundary-recordings
+
+    # Test the new user
+    mc alias set test-boundary http://localhost:9000 $ACCESS_KEY $SECRET_KEY
+    
+    #mc ls test-boundary
+    #mc alias remove test-boundary
+
+    export BOUNDARY_TOKEN=$(boundary authenticate password \
+        -auth-method-id="$AUTH_METHOD_ID" \
+        -login-name=$ADMIN_LOGIN_UID \
+        -password=env://BOUNDARY_PASSWORD \
+        -format json | jq  -r '.item.attributes.token')
+
+    boundary storage-buckets create \
+   -bucket-name myminiobucket \
+   -plugin-name minio \
+   -scope-id global\
+   -bucket-prefix="boundary/boundary-recordings" \
+   -worker-filter '"local" in "/tags/worker"' \
+   -attr endpoint_url="http://127.0.0.1:9000" \
+   -attr disable_credential_rotation=true \
+   -secret access_key_id=$ACCESS_KEY \
+   -secret secret_access_key=$SECRET_KEY \
+   -token env://BOUNDARY_TOKEN
+    
+}
+#addcacert
+setupldapsecretengine
+setupldapauthengine
+#setupvaultcredstore
+

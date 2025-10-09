@@ -104,6 +104,9 @@ setupminio() {
 
 setupboundarycontroller() {
 echo "Setting up Boundary Controller"
+# Copy license files to boundary for enterprise features
+docker cp /tmp/boundary.hclic vault:/tmp/boundary.hclic
+
 sudo cat << EOF > controller.hcl
     controller {
       name = "boundary-controller"
@@ -151,7 +154,14 @@ sudo cat << EOF > controller.hcl
     aead_type = "aes-gcm"
     key = "DfvbhCAGba7TvdvpiVrbh2IVTQlhoC7t/RXGvfRJlVI="
     key_id = "global_worker-auth"
-}
+    }
+
+    kms "aead" {
+    purpose = "bsr"
+    aead_type = "aes-gcm"
+    key = "DfvbhCAGba7TvdvpiVrbh2IVTQlhoC7t/RXGvfRJlVI="
+    key_id = "bsr"
+    }
 
 EOF
 
@@ -186,8 +196,9 @@ docker run --rm \
   --network host \
   --cap-add IPC_LOCK \
   -v "$(pwd)/controller.hcl":/boundary/controller.hcl \
+  -v "/tmp/boundary.hclic":/tmp/boundary.hclic \
   -e "BOUNDARY_POSTGRES_URL=postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable" \
-  hashicorp/boundary:latest \
+  hashicorp/boundary-enterprise:latest \
   boundary database init -config=/boundary/controller.hcl
 
 # Run Boundary Controller in Docker
@@ -197,9 +208,10 @@ docker run -d  \
   --cap-add IPC_LOCK \
   -v "$(pwd)/controller.hcl":/boundary/controller.hcl \
   -v "$(pwd)/recovery.hcl":/boundary/recovery.hcl \
+  -v "/tmp/boundary.hclic":/tmp/boundary.hclic \
   -e "BOUNDARY_POSTGRES_URL=postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable" \
   -e "BOUNDARY_PASSWORD=$ADMIN_LOGIN_PWD" \
-  hashicorp/boundary:latest \
+  hashicorp/boundary-enterprise:latest \
   boundary server -config=/boundary/controller.hcl
 
   # Wait for Boundary to be ready (max 30 seconds)
@@ -234,12 +246,12 @@ initboundarycontroller() {
   echo "Scope ID is: $SCOPE_ID"
 
   #create project
-  # export PROJECT_ID=$(boundary scopes create -name 'project' -scope-id $SCOPE_ID \
-  # -recovery-config /boundary/recovery.hcl \
-  # -skip-admin-role-creation \
-  # -skip-default-role-creation \
-  # -format json | jq -r '.item.id')
-  # echo "Project ID is: $PROJECT_ID"
+  export PROJECT_ID=$(boundary scopes create -name 'project' -scope-id $SCOPE_ID \
+  -recovery-config /boundary/recovery.hcl \
+  -skip-admin-role-creation \
+  -skip-default-role-creation \
+  -format json | jq -r '.item.id')
+  echo "Project ID is: $PROJECT_ID"
 
   # create an auth method in scope global
   export AUTH_METHOD_ID=$(boundary auth-methods create password \
@@ -287,8 +299,13 @@ echo "Role ID is: $ROLE_ID"
 export GRANT_SCOPE_ID=$(boundary roles set-grant-scopes \
   -recovery-config /boundary/recovery.hcl \
   -id $ROLE_ID \
-  -grant-scope-id global \
+  -grant-scope-id "global" \
   -format json | jq -r '.item.id')
+
+boundary roles add-grant-scopes \
+  -recovery-config /boundary/recovery.hcl \
+  -id $ROLE_ID -grant-scope-id "this" \
+  -grant-scope-id "descendants"
 
 echo "Grant Scope ID is: $GRANT_SCOPE_ID"
 
@@ -336,7 +353,7 @@ worker {
   name = "boundary-worker-1"
   description = "Demo Boundary Worker"
   initial_upstreams = ["127.0.0.1"]
-  recording_storage_path = "/local/storage/directory"
+  recording_storage_path = "/tmp/boundary-recordings"
   recording_storage_minimum_available_capacity = "50MB"
   public_addr = "127.0.0.1"
   tags {
@@ -350,6 +367,13 @@ kms "aead" {
   key = "DfvbhCAGba7TvdvpiVrbh2IVTQlhoC7t/RXGvfRJlVI="
   key_id = "global_worker-auth"
 }
+
+kms "aead" {
+  purpose = "bsr"
+  aead_type = "aes-gcm"
+  key = "DfvbhCAGba7TvdvpiVrbh2IVTQlhoC7t/RXGvfRJlVI="
+  key_id = "bsr"
+}
 EOF
 
 # Run Boundary Worker in Docker
@@ -358,7 +382,7 @@ docker run -d \
   --network host \
   --cap-add IPC_LOCK \
   -v "$(pwd)/worker.hcl":/boundary/worker.hcl \
-  hashicorp/boundary:latest \
+  hashicorp/boundary-enterprise:latest \
   boundary server -config=/boundary/worker.hcl
 
   boundary() {
@@ -422,26 +446,35 @@ setupvault() {
 
   # Test Vault is running & vault health
   STATUS_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8200/v1/sys/health)
-  echo "Vault status code: $STATUS_CODE"
-
-  if [ "$STATUS_CODE" -eq 200 ]; then
-    echo "Vault is running and healthy!"
-  else
-    echo "Vault is not healthy. Status code: $STATUS_CODE"
-    exit 1
-  fi
+  counter=0
+  until [ "$STATUS_CODE" -eq 200 ]; do
+      sleep 1
+      counter=$((counter + 1))
+      if [ $counter -ge 5 ]; then
+        echo "Vault did not start within 5 seconds. Status code: $STATUS_CODE"
+        exit 1
+      fi
+      STATUS_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8200/v1/sys/health)
+    done
+    echo "Vault is ready with $STATUS_CODE!"
 }
 
-# setupdb
-# setupminio
-# setupboundarycontroller
-# initboundarycontroller
-# setupboundaryworker
+setupdb
+setupminio
+setupboundarycontroller
+initboundarycontroller
+setupboundaryworker
 setupvault
 
 # Add alias to ~/.bashrc for use outside this script
 if ! grep -q "alias psqld=" ~/.bashrc; then
     echo 'alias psqld="docker exec -it postgres psql"' >> ~/.bashrc
+    . ~/.bashrc
+    echo "Added psqld alias to ~/.bashrc (available in new terminal sessions)"
+fi
+
+if ! grep -q "alias mc=" ~/.bashrc; then
+    echo 'alias mc="docker exec -it minio mc"' >> ~/.bashrc
     . ~/.bashrc
     echo "Added psqld alias to ~/.bashrc (available in new terminal sessions)"
 fi
@@ -483,6 +516,9 @@ echo "Boundary Controller Login Admin User ID is: $ADMIN_LOGIN_UID and Password 
 echo "Boundary Controller ORG_NAME is: $ORG_NAME"
 echo "Boundary Controller AUTH_METHOD_NAME is: $AUTH_METHOD_NAME"
 
+# Print Vault details
+echo "Vault Address is: http://localhost:8200"
+echo "Vault token is myroot"
 
 # Setup MinIO S3-Compatible server
 # wget https://dl.min.io/server/minio/release/linux-amd64/minio
