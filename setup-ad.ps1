@@ -15,6 +15,7 @@ Write-Log "Starting Active Directory installation on AWS EC2 Windows Server 2025
 # Step 1: Install AD DS Role and Management Tools
 Write-Log "Installing Active Directory Domain Services role..."
 # try {
+
 #     Install-WindowsFeature -Name AD-Domain-Services -IncludeManagementTools
 #     Write-Log "AD DS role installed successfully"
 # } catch {
@@ -59,16 +60,6 @@ try {
     exit 1
 }
 
-# Disable LDAP signing requirement
-Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" -Name "LDAPServerIntegrity" -Value 0
-Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" -Name "LDAPServerIntegrity"
-Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" -Name "LdapEnforceChannelBinding" -Value 0 -Type DWord
-Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" | Select-Object LDAPServerIntegrity, LdapEnforceChannelBinding
-
-# Restart the computer
-Restart-Computer -Force
-
-
 # PS C:\Users\Administrator\Desktop> Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\NTDS\Parameters" | Select-Object LDAPServerIntegrity, LdapEnforceChannelBinding
 
 # ldapserverintegrity LdapEnforceChannelBinding
@@ -77,11 +68,11 @@ Restart-Computer -Force
 
 
 # Step 3: create a new user for connection to ldap/ad
-New-ADUser -Name "boundary" `
-    -GivenName "Boundary" `
-    -Surname "Admin" `
-    -SamAccountName "boundary" `
-    -UserPrincipalName "boundary@example.local" `
+New-ADUser -Name "vault" `
+    -GivenName "vault" `
+    -Surname "vault" `
+    -SamAccountName "vault" `
+    -UserPrincipalName "vault@example.local" `
     -Path "CN=Users,DC=example,DC=local" `
     -AccountPassword (ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force) `
     -Enabled $true `
@@ -89,12 +80,12 @@ New-ADUser -Name "boundary" `
     -ChangePasswordAtLogon $false
 
 # Add to Domain Admins (full admin rights)
-Add-ADGroupMember -Identity "Domain Admins" -Members "boundaryadmin"
+Add-ADGroupMember -Identity "Domain Admins" -Members "vault"
 
  Verify user was created
 Get-ADUser -Identity $Username
 Get-ADGroupMember -Identity "Domain Admins" | Where-Object {$_.SamAccountName -eq $Username}
-
+#Get-ADGroupMember -Identity "Domain Admins" | Where-Object {$_.SamAccountName -eq "vault"}
 # Note: Server will automatically reboot after promotion
 Write-Log "Domain Controller promotion initiated. Server will reboot..."
 

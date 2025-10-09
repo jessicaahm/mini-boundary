@@ -8,29 +8,33 @@ vault() {
     docker exec -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN=myroot vault vault "$@"
 }
 
+addcacert() {
+    echo "Install The AD Self-Signed Certificate into Vault container"
+    # convert cer to pem format
+    openssl x509 -inform DER -in ad-cert.cer -out ad-cert.pem
+    docker cp /tmp/ad-cert.pem vault:/tmp/ad-cert.pem
+    # Method 1: Append the certificate to the CA bundle --> Get the self-sign cert from AD first
+    docker exec vault sh -c 'cat /tmp/ad-cert.pem >> /etc/ssl/certs/ca-certificates.crt'
+
+    # Verify it was added
+    docker exec vault tail -20 /etc/ssl/certs/ca-certificates.crt
+
+    # Restart Vault
+    docker restart vault
+}
+
+
 # LDAP Variables - Using LDAPS due to Windows Server 2025 security requirements
-export LDAP_URL=ldaps://13.222.94.228:636
-export LDAP_BIND_DN="CN=Administrator,CN=Users,DC=example,DC=local"
-export LDAP_BIND_PASSWORD=""
+export LDAP_URL=ldaps://13.218.126.189:636
+export LDAP_BIND_DN="CN=vault,CN=Users,DC=example,DC=local"
+export LDAP_BIND_PASSWORD="P@ssw0rd123!"
 
 echo "Testing LDAP connection first..."
-# Method 1: Append the certificate to the CA bundle --> Get the self-sign cert from AD first
-# docker exec vault sh -c 'cat /usr/local/share/ca-certificates/ad-cert.crt >> /etc/ssl/certs/ca-certificates.crt'
 
-# # Verify it was added
-# docker exec vault tail -20 /etc/ssl/certs/ca-certificates.crt
-
-# # Restart Vault
-# docker restart vault
 
 # Verify LDAP SEARCH work
-LDAPTLS_REQCERT=never ldapsearch -x -H ldaps://13.222.94.228:636 -D "CN=Administrator,CN=Users,DC=example,DC=local" -w "*KMN0@nzh2B.RMNNY*Oa&9AzV?8hCX*M" -b "DC=example,DC=local" "(objectClass=user)" cn
+LDAPTLS_REQCERT=never ldapsearch -x -H $LDAP_URL -D $LDAP_BIND_DN -w $LDAP_BIND_PASSWORD -b "DC=example,DC=local" "(objectClass=user)" cn
 
-LDAPTLS_REQCERT=never ldapsearch -x -H ldaps://13.222.94.228:636 \
-  -D "CN=Administrator,CN=Users,DC=example,DC=local" \
-  -w "*KMN0@nzh2B.RMNNY*Oa&9AzV?8hCX*M" \
-  -b "DC=example,DC=local" \
-  "(objectClass=organizationalUnit)" dn
 setupldapsecretengine(){
     echo "Logging into Vault..."
     vault login myroot
@@ -52,6 +56,13 @@ setupldapsecretengine(){
     echo ""
     echo "Creating dynamic role for read-only users..."
 
+
+# Validate LDIF syntax
+LDAPTLS_REQCERT=never ldapmodify -H $LDAP_URL \
+  -D $LDAP_BIND_DN \
+  -w $LDAP_BIND_PASSWORD \
+  -f /tmp/creation.ldif \
+  -n
     # Create LDIF file for user creation (simpler approach)
     cat > /tmp/creation.ldif <<'EOF'
 dn: CN={{.Username}},CN=Users,DC=example,DC=local
@@ -60,13 +71,23 @@ objectClass: top
 objectClass: person
 objectClass: organizationalPerson
 objectClass: user
-cn: {{.Username}}
-sAMAccountName: {{.Username}}
 userPrincipalName: {{.Username}}@example.local
-unicodePwd:: {{printf "\"%s\"" .Password | utf16le | base64}}
-userAccountControl: 66048
-accountExpires: 0
+sAMAccountName: {{.Username}}
+
+dn: CN={{.Username}},CN=Users,DC=example,DC=local
+changetype: modify
+replace: unicodePwd
+unicodePwd::{{.Password | utf16le | base64}}
+-
+replace: userAccountControl
+userAccountControl: 512
+
+dn: CN=test-group,CN=Users,DC=example,DC=local
+changetype: modify
+add: member
+member: CN={{.Username}},CN=Users,DC=example,DC=local
 EOF
+
 
     # Create LDIF file for rollback (disable account instead of delete)
 # Create LDIF file for rollback (disable account instead of delete) - FIXED
@@ -92,9 +113,9 @@ EOF
     vault write ldap/role/readonly \
         creation_ldif=@/tmp/creation.ldif \
         deletion_ldif=@/tmp/deletion.ldif \
-        rollback_ldif=@/tmp/rollback.ldif \
         default_ttl=1h \
-        max_ttl=24h
+        max_ttl=24h \
+        username_template="v_{{unix_time}}"
 
     # Clean up temp files
     rm -f /tmp/creation.ldif /tmp/deletion.ldif
