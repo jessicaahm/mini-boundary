@@ -111,6 +111,7 @@ sudo cat << EOF > controller.hcl
       database {
         url = "postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable"
       }
+      license = "file:///tmp/boundary.hclic"
     }
 
     listener "tcp" {
@@ -335,6 +336,8 @@ worker {
   name = "boundary-worker-1"
   description = "Demo Boundary Worker"
   initial_upstreams = ["127.0.0.1"]
+  recording_storage_path = "/local/storage/directory"
+  recording_storage_minimum_available_capacity = "50MB"
   public_addr = "127.0.0.1"
   tags {
     type = ["worker", "local"]
@@ -414,9 +417,19 @@ docker exec -e "WORKER_AUTH_TOKEN=$WORKER_AUTH_TOKEN" -e "BOUNDARY_TOKEN=$BOUNDA
 # Set up vault
 setupvault() {
   echo "Setting up Vault"
-  docker run -d -p 8200:8200 --name vault --cap-add=IPC_LOCK -e 'VAULT_DEV_ROOT_TOKEN_ID=myroot' -e 'VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200' -e 'VAULT_ADDR=http://127.0.0.1:8200' hashicorp/vault
+  # Setup Vault in docker
+  docker run -d -p 8200:8200 --name vault --cap-add=IPC_LOCK -e 'VAULT_ADDR=http://127.0.0.1:8200' -e 'VAULT_DEV_ROOT_TOKEN_ID=myroot' -e 'VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200' hashicorp/vault
 
-  curl -k http://localhost:8200/v1/sys/health | jq
+  # Test Vault is running & vault health
+  STATUS_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8200/v1/sys/health)
+  echo "Vault status code: $STATUS_CODE"
+
+  if [ "$STATUS_CODE" -eq 200 ]; then
+    echo "Vault is running and healthy!"
+  else
+    echo "Vault is not healthy. Status code: $STATUS_CODE"
+    exit 1
+  fi
 }
 
 # setupdb
@@ -440,7 +453,7 @@ if ! grep -q "alias boundary=" ~/.bashrc; then
 fi
 
 if ! grep -q "alias vault=" ~/.bashrc; then
-    echo 'alias vault="docker exec -it vault vault -dev-tls"' >> ~/.bashrc
+    echo 'alias vault="docker exec -it vault vault"' >> ~/.bashrc
     . ~/.bashrc
     echo "Added vault alias to ~/.bashrc (available in new terminal sessions)"
 fi
