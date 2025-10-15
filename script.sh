@@ -21,6 +21,7 @@ export AUTH_METHOD_NAME="password"
 export ADMIN_LOGIN_UID="admin"
 export ROLE_NAME="orgadmin"
 export ADMIN_LOGIN_PWD="mypassword"
+export VM_IP_ADDR="44.201.45.112"
 
 # Setup PostgresSQl Database
 setupdb() {
@@ -352,10 +353,10 @@ listener "tcp" {
 worker {
   name = "boundary-worker-1"
   description = "Demo Boundary Worker"
-  initial_upstreams = ["127.0.0.1"]
+  initial_upstreams = ["127.0.0.1:9201"]
   recording_storage_path = "/tmp/boundary-recordings"
   recording_storage_minimum_available_capacity = "50MB"
-  public_addr = "127.0.0.1"
+  public_addr = "$VM_IP_ADDR"
   tags {
     type = ["worker", "local"]
   }
@@ -406,7 +407,7 @@ echo "Checking ADMIN LOGIN UID again: $ADMIN_LOGIN_UID"
 
 export BOUNDARY_TOKEN=$(boundary authenticate password \
   -auth-method-id="$AUTH_METHOD_ID" \
-  -login-name=$ADMIN_LOGIN_UID \
+  -login-name="$ADMIN_LOGIN_UID"\
   -password=env://BOUNDARY_PASSWORD \
   -format json | jq  -r '.item.attributes.token')
 
@@ -438,64 +439,42 @@ docker exec -e "WORKER_AUTH_TOKEN=$WORKER_AUTH_TOKEN" -e "BOUNDARY_TOKEN=$BOUNDA
 
 }
 
-# Set up vault
-setupvault() {
-  echo "Setting up Vault"
-  # Setup Vault in docker
-  docker run -d -p 8200:8200 --name vault --cap-add=IPC_LOCK -e 'VAULT_ADDR=http://127.0.0.1:8200' -e 'VAULT_DEV_ROOT_TOKEN_ID=myroot' -e 'VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200' hashicorp/vault
-
-  # Test Vault is running & vault health
-  STATUS_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8200/v1/sys/health)
-  counter=0
-  until [ "$STATUS_CODE" -eq 200 ]; do
-      sleep 1
-      counter=$((counter + 1))
-      if [ $counter -ge 5 ]; then
-        echo "Vault did not start within 5 seconds. Status code: $STATUS_CODE"
-        exit 1
-      fi
-      STATUS_CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8200/v1/sys/health)
-    done
-    echo "Vault is ready with $STATUS_CODE!"
-}
-
 setupdb
 setupminio
 setupboundarycontroller
 initboundarycontroller
 setupboundaryworker
-setupvault
 
 # Add alias to ~/.bashrc for use outside this script
-if ! grep -q "alias psqld=" ~/.bashrc; then
-    echo 'alias psqld="docker exec -it postgres psql"' >> ~/.bashrc
-    . ~/.bashrc
-    echo "Added psqld alias to ~/.bashrc (available in new terminal sessions)"
-fi
+# if ! grep -q "alias psqld=" ~/.bashrc; then
+#     echo 'alias psqld="docker exec -it postgres psql"' >> ~/.bashrc
+#     . ~/.bashrc
+#     echo "Added psqld alias to ~/.bashrc (available in new terminal sessions)"
+# fi
 
-if ! grep -q "alias mc=" ~/.bashrc; then
-    echo 'alias mc="docker exec -it minio mc"' >> ~/.bashrc
-    . ~/.bashrc
-    echo "Added psqld alias to ~/.bashrc (available in new terminal sessions)"
-fi
+# if ! grep -q "alias mc=" ~/.bashrc; then
+#     echo 'alias mc="docker exec -it minio mc"' >> ~/.bashrc
+#     . ~/.bashrc
+#     echo "Added psqld alias to ~/.bashrc (available in new terminal sessions)"
+# fi
 
-if ! grep -q "alias boundary=" ~/.bashrc; then
-    echo 'alias boundary="docker exec -it boundary-controller boundary"' >> ~/.bashrc
-    . ~/.bashrc
-    echo "Added boundary alias to ~/.bashrc (available in new terminal sessions)"
-fi
+# if ! grep -q "alias boundary=" ~/.bashrc; then
+#     echo 'alias boundary="docker exec -it boundary-controller boundary"' >> ~/.bashrc
+#     . ~/.bashrc
+#     echo "Added boundary alias to ~/.bashrc (available in new terminal sessions)"
+# fi
 
-if ! grep -q "alias vault=" ~/.bashrc; then
-    echo 'alias vault="docker exec -it vault vault"' >> ~/.bashrc
-    . ~/.bashrc
-    echo "Added vault alias to ~/.bashrc (available in new terminal sessions)"
-fi
+# if ! grep -q "alias vault=" ~/.bashrc; then
+#     echo 'alias vault="docker exec -it vault vault"' >> ~/.bashrc
+#     . ~/.bashrc
+#     echo "Added vault alias to ~/.bashrc (available in new terminal sessions)"
+# fi
 
-if ! grep -q "alias worker=" ~/.bashrc; then
-    echo 'alias worker="docker exec -it boundary-worker boundary"' >> ~/.bashrc
-    . ~/.bashrc
-    echo "Added worker alias to ~/.bashrc (available in new terminal sessions)"
-fi
+# if ! grep -q "alias worker=" ~/.bashrc; then
+#     echo 'alias worker="docker exec -it boundary-worker boundary"' >> ~/.bashrc
+#     . ~/.bashrc
+#     echo "Added worker alias to ~/.bashrc (available in new terminal sessions)"
+# fi
 
 
 export POSTGRES_DB_IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' postgres)
@@ -516,26 +495,6 @@ echo "Boundary Controller Login Admin User ID is: $ADMIN_LOGIN_UID and Password 
 echo "Boundary Controller ORG_NAME is: $ORG_NAME"
 echo "Boundary Controller AUTH_METHOD_NAME is: $AUTH_METHOD_NAME"
 
-# Print Vault details
-echo "Vault Address is: http://localhost:8200"
-echo "Vault token is myroot"
-
-# Setup MinIO S3-Compatible server
-# wget https://dl.min.io/server/minio/release/linux-amd64/minio
-# chmod +x minio
-# sudo mv minio /usr/local/bin/
-
-# Setup MinIO Client
-# wget https://dl.min.io/client/mc/release/linux-amd64/mc
-# chmod +x mc
-# sudo mv mc /usr/local/bin/
-
-# minio server /data
-
-# Download and install HashiCorp Boundary Controller
-# wget -O - https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
-# echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
-# sudo apt update && sudo apt install boundary
 
 
 

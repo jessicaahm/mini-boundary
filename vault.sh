@@ -6,7 +6,6 @@ export VM_IP_ADDR="44.198.55.208"
 export VAULT_TOKEN=myroot
 export VAULT_PATH="/tmp"
 
-
 # Set up vault
 setupvault() {
   echo "Setting up Vault"
@@ -51,8 +50,6 @@ sudo docker run \
   echo "vault is running!"
 }
 
-
-
 initvault() {
     echo "Initializing Vault"
     export VAULT_ADDR="http://127.0.0.1:8200"
@@ -91,8 +88,24 @@ else
 fi
 }
 
+addcacert() { # Add CA cert to Vault container (first run only)
+    echo "Install The AD Self-Signed Certificate into Vault container"
+    # convert cer to pem format
+    openssl x509 -inform DER -in ad-cert.cer -out ad-cert.pem
+    sudo docker cp /tmp/ad-cert.pem vault:/tmp/ad-cert.pem
+    # Method 1: Append the certificate to the CA bundle --> Get the self-sign cert from AD first
+    sudo docker exec vault sh -c 'cat /tmp/ad-cert.pem >> /etc/ssl/certs/ca-certificates.crt'
+
+    # Verify it was added
+    sudo docker exec vault tail -20 /etc/ssl/certs/ca-certificates.crt
+
+    # Restart Vault
+    sudo docker restart vault
+}
+
 setupvault
 initvault
+#addadcert #(If needed ldaps)
 
 echo "VAULT_ADDR=http://$VM_IP_ADDR:8200"
 echo "VAULT_TOKEN=$(cat $VAULT_PATH/vault/root_token.txt)"
