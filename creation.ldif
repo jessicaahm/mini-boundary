@@ -1,0 +1,11 @@
+dn: CN={{.Username}},CN=Users,DC=lab,DC=com
+changetype: add
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: {{.Username}}
+userPrincipalName: {{.Username}}@lab.com
+sAMAccountName: {{.Username}}
+unicodePwd::{{ printf "%q" .Password | utf16le | base64 }}
+userAccountControl: 66048
