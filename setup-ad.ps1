@@ -31,8 +31,8 @@ $ServerIP = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.InterfaceAl
 $ServerHostname = $env:COMPUTERNAME
 
 # Define domain parameters
-$DomainName = "example.local"
-$DomainNetBIOSName = "EXAMPLE"
+$DomainName = "lab.com"
+$DomainNetBIOSName = "LAB"
 $SafeModePassword = ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force
 
 Write-Log "Domain Name: $DomainName"
@@ -41,6 +41,7 @@ Write-Log "Server IP: $ServerIP"
 Write-Log "Server Hostname: $ServerHostname"
 
 # Promote server to Domain Controller
+
 try {
     Install-ADDSForest `
         -DomainName $DomainName `
@@ -72,8 +73,8 @@ New-ADUser -Name "vault" `
     -GivenName "vault" `
     -Surname "vault" `
     -SamAccountName "vault" `
-    -UserPrincipalName "vault@example.local" `
-    -Path "CN=Users,DC=example,DC=local" `
+    -UserPrincipalName "vault@lab.com" `
+    -Path "CN=Users,DC=lab,DC=com" `
     -AccountPassword (ConvertTo-SecureString "P@ssw0rd123!" -AsPlainText -Force) `
     -Enabled $true `
     -PasswordNeverExpires $true `

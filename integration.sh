@@ -3,26 +3,26 @@
 # Pass is needed
 
 # Set up Vault Creds Store
-export AUTH_METHOD_ID="ampw_itLVtDbjHJ"
+export AUTH_METHOD_ID="ampw_UcJSWJAG7O"
 export ADMIN_LOGIN_UID="admin"
 export BOUNDARY_PASSWORD="mypassword"
 export BOUNDARY_VM_IP_ADDR="44.201.45.112"
 export VAULT_VM_IP_ADDR="44.198.55.208"
-export PROJECT_SCOPE="p_C36VKbloaD"
+export PROJECT_SCOPE="p_9vMzmeAqc0"
 export VAULT_ADDR="http://$VAULT_VM_IP_ADDR:8200"
 export VAULT_TOKEN="hvs.GyvuuXlNWOmjnw934sKwY0hT" 
 export VAULT_CREDS_TOKEN=""
 export BOUNDARY_ADDR="http://$BOUNDARY_VM_IP_ADDR:9200"
 # Set up Secret Engine
-export LDAP_URL="ldaps://10.0.1.185:636" 
+export LDAP_URL="ldaps://10.0.1.127:636" 
  # need be created in AD first
-export LDAP_BIND_DN="CN=vault,CN=Users,DC=example,DC=local"
+export LDAP_BIND_DN="CN=vault,CN=Users,DC=lab,DC=com"
 export LDAP_BIND_PASSWORD='P@ssw0rd123!' 
 # need to be updated based on your AD structure
-export LDAP_USER_DN="CN=Users,DC=example,DC=local"
-export LDAP_GRP_DN="CN=NewGroup,DC=example,DC=local"
-export UPNDOMAIN="example.local"
-export LDAP_USR_DN="CN=Users,DC=example,DC=local"
+export LDAP_USER_DN="CN=Users,DC=lab,DC=com"
+# export LDAP_GRP_DN="CN=NewGroup,DC=lab,DC=com"
+export UPNDOMAIN="lab.com"
+export LDAP_USR_DN="CN=Users,DC=lab,DC=com"
 
 setuptoken() {
     # Create token for integration: Periodic + Renewable + Orphan
@@ -52,6 +52,10 @@ path "sys/capabilities-self" {
 }
 
 path "ldap/creds/readonly" {
+  capabilities = ["update","read","list"]
+}
+
+path "ssh/creds/otp_key_role" {
   capabilities = ["update","read","list"]
 }
 
@@ -120,16 +124,17 @@ setupldapsecretengine(){
 
     # Create LDIF file for user creation (simpler approach)
     cat > /tmp/creation.ldif <<'EOF'
-dn: CN={{.Username}},CN=Users,DC=example,DC=local
+dn: CN={{.Username}},CN=Users,DC=lab,DC=com
 changetype: add
 objectClass: top
 objectClass: person
 objectClass: organizationalPerson
 objectClass: user
-userPrincipalName: {{.Username}}@example.local
+cn: {{.Username}}
+userPrincipalName: {{.Username}}@lab.com
 sAMAccountName: {{.Username}}
 
-dn: CN={{.Username}},CN=Users,DC=example,DC=local
+dn: CN={{.Username}},CN=Users,DC=lab,DC=com
 changetype: modify
 replace: unicodePwd
 unicodePwd::{{ printf "%q" .Password | utf16le | base64 }}
@@ -138,10 +143,10 @@ replace: userAccountControl
 userAccountControl: 66048
 -
 
-dn: CN=NewGroup,DC=example,DC=local
+dn: CN=NewGroup,DC=lab,DC=com
 changetype: modify
 add: member
-member: CN={{.Username}},CN=Users,DC=example,DC=local
+member: CN={{.Username}},CN=Users,DC=lab,DC=com
 -
 EOF
 
@@ -194,7 +199,7 @@ setupldapauthengine(){
     vault write auth/ldap/config \
     url=$LDAP_URL \
     userdn=$LDAP_USR_DN \
-    groupdn=$LDAP_GRP_DN \
+    # groupdn=$LDAP_GRP_DN \
     groupfilter='(&(objectClass=group)(member:1.2.840.113556.1.4.1941:={{.UserDN}}))' \
     groupattr='cn' \
     upndomain=$UPNDOMAIN \
@@ -221,9 +226,8 @@ EOF
 
 setuptarget() {
     echo "create target for boundary to access"
-
 }
 
-#setupldapsecretengine
+setupldapsecretengine
 #setupldapauthengine
-setupvaultcredstore
+#setupvaultcredstore

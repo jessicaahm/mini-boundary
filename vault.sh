@@ -2,19 +2,18 @@
 # This need Vault CLI installed
 
 # Vault Setup
-export VM_IP_ADDR="44.198.55.208"
-export VAULT_TOKEN=myroot
-export VAULT_PATH="/tmp"
+export VM_IP_ADDR="44.200.50.166"
+export VAULT_PATH="/vault"
 
 # Set up vault
 setupvault() {
   echo "Setting up Vault"
 
-  sudo mkdir /tmp/vault
-  sudo mkdir /tmp/vault/{config,data}
+  sudo mkdir /vault
+  sudo mkdir /vault/{config,data}
 
   # Run Vault in a Docker Container Server
-  sudo tee /tmp/vault/config/vault-server.hcl <<EOF
+  sudo tee /vault/config/vault-server.hcl <<EOF
     ui = true
     disable_mlock = true
     listener "tcp" {
@@ -35,11 +34,12 @@ sudo docker run \
       -e VAULT_ADDR="http://127.0.0.1:8200" \
       -e VAULT_CLUSTER_ADDR="http://127.0.0.1:8201" \
       -e VAULT_API_ADDR="http://$VM_IP_ADDR:8200" \
-      -v "$VAULT_PATH"/vault/config/:/vault/config \
-      -v "$VAULT_PATH"/vault/data/:/vault/file:z \
+      -e VAULT_LICENSE="02MV4UU43BK5HGYYTOJZWFQMTMNNEWU33JJVVESNKNNVGTGTT2JF2FS6S2NBNFGMBULJCESMKMK5NGWTSXIV2E6R2FGFNFIWTMJV5GY3C2NJMTASLJO5UVSM2WPJSEOOLULJMEUZTBK5IWST3JJJUU4MSONBGUOSTKLFUTC3K2K5EXOTCUNMYU4VCFORMXU3DLJZBTA6CZK5HG2TLKLF5E4RDDGJMVIWLJJRBUU4DCNZHDAWKXPBZVSWCSOBRDENLGMFLVC2KPNFEXCSLJO5UWCWCOPJSFOVTGMRDWY5C2KNETMSLKJF3U22SVORGVIQLUJVKFUVKNIRITMTLKMM3E22SJOVHEIYZRJVKFS6KNNJEXQV3JJFZUS3SOGBMVQSRQLAZVE4DCK5KWST3JJF4U2RCJGFGFIRLXJRKEKMSWIRAXOT3KIF3U62SBO5LWSSLTJFWVMNDDI5WHSWKYKJYGEMRVMZSEO3DULJJUSNSJNJEXOTLKLF2E2VCFORGXUQSVJVCECNSNIRATMTKEIJQUS2LXNFSEOVTZMJLWY5KZLBJHAYRSGVTGIR3MORNFGSJWJFVES52NNJMXITKUIV2E26SCKVGUIQJWJVCECNSNIRBGCSLJO5UWGSCKOZNEQVTKMRBUSNSJNZNGQZCXPAYES2LXNFNG26DILIZU22KPNZZWSY2HIZVGCMSGNZNFGSJWJFXFE6LBK5DHGSLOGE4S4L3SLJKEIMDUNFSXKVSUIJLUKTRQNMYVGR2POJIHUYKUMIZW4MKNMRZHIZSHJVWXEOKEONRWWS3IFNMWIVSMPJWUCMKDKN3DMY2CMFFVEZKUJZIDKMDFMZJUQM3WKV2TS5KGLJRUGSRRMRAWWY3BGRSFMMBTGM4FA53NKZWGC5SKKA2HASTYJFETSRBWKVDEYVLBKZIGU22XJJ2GGRBWOBQWYNTPJ5TEO3SLGJ5FAS2KKJWUOSCWGNSVU53RIZSSW3ZXNMXXGK2BKRHGQUC2M5JS6S2WLFTS6SZLNRDVA52MG5VEE6CJG5DU6YLLGZKWC2LBJBXWK2ZQKJKG6NZSIRIT2PI" \
+      -v "$VAULT_PATH"/config/:/vault/config \
+      -v "$VAULT_PATH"/data/:/vault/file:z \
       --cap-add=IPC_LOCK \
       -d \
-      hashicorp/vault vault server -config=/vault/config/vault-server.hcl
+      hashicorp/vault-enterprise vault server -config=/vault/config/vault-server.hcl
 
   # Check if docker is running
   sleep 8
@@ -55,24 +55,24 @@ initvault() {
     export VAULT_ADDR="http://127.0.0.1:8200"
     vault operator init \
         -key-shares=1 \
-        -key-threshold=1 > /$VAULT_PATH/vault/vault_init_output.txt
+        -key-threshold=1 > /$VAULT_PATH/vault_init_output.txt
 
     #docker cp vault:/vault/vault_init_output.txt $VAULT_PATH/vault/vault_init_output.txt
 
-    grep 'Unseal Key 1' "$VAULT_PATH"/vault/vault_init_output.txt \
-        | awk '{print $NF}' > "$VAULT_PATH"/vault/unseal_key.txt
+    grep 'Unseal Key 1' "$VAULT_PATH"/vault_init_output.txt \
+        | awk '{print $NF}' > "$VAULT_PATH"/unseal_key.txt
 
-    grep 'Initial Root Token' "$VAULT_PATH"/vault/vault_init_output.txt \
-        | awk '{print $NF}' > "$VAULT_PATH"/vault/root_token.txt
+    grep 'Initial Root Token' "$VAULT_PATH"/vault_init_output.txt \
+        | awk '{print $NF}' > "$VAULT_PATH"/root_token.txt
 
     # Check if unseal_key.txt is empty
-    if [ ! -s "$VAULT_PATH"/vault/unseal_key.txt ]; then
+    if [ ! -s "$VAULT_PATH"/unseal_key.txt ]; then
       echo "Error: unseal_key.txt is empty or not found!"
       exit 1
     fi
 
     # Unseal Vault
-    UNSEAL_KEY=$(cat "$VAULT_PATH"/vault/unseal_key.txt)
+    UNSEAL_KEY=$(cat "$VAULT_PATH"/unseal_key.txt)
     echo "Unsealing Vault with key: $UNSEAL_KEY"
 
     vault operator unseal $UNSEAL_KEY
@@ -105,7 +105,7 @@ addcacert() { # Add CA cert to Vault container (first run only)
 
 setupvault
 initvault
-#addadcert #(If needed ldaps)
+addcacert #(If needed ldaps)
 
 echo "VAULT_ADDR=http://$VM_IP_ADDR:8200"
 echo "VAULT_TOKEN=$(cat $VAULT_PATH/vault/root_token.txt)"

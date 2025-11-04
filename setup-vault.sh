@@ -1,45 +1,41 @@
 #!/bin/bash
-
-# Vault environment variables
-export VAULT_ADDR=http://localhost:8200
-export VAULT_TOKEN=myroot
-export LDAP_URL=ldaps://13.218.126.189:636
-export LDAP_BIND_DN="CN=vault,CN=Users,DC=example,DC=local"
-export LDAP_BIND_PASSWORD="P@ssw0rd123!"
-export LDAP_GRP_DN="CN=NewGroup,DC=example,DC=local"
-export UPNDOMAIN="example.local"
-export LDAP_USR_DN="CN=Users,DC=example,DC=local"
+# Vault LDAP Secret Secret Engine
+export LDAP_URL=ldaps://10.0.1.127:636 # AD Server IP
+export LDAP_BIND_DN="CN=vault,CN=Users,DC=lab,DC=com"
+export LDAP_BIND_PASSWORD='P@ssw0rd123!'
+export LDAP_USER_DN="CN=Users,DC=lab,DC=com"
+export LDAP_GRP_DN="CN=NewGroup,DC=lab,DC=com"
+export UPNDOMAIN="lab.com"
+export LDAP_USR_DN="CN=Users,DC=lab,DC=com"
 # To be updated for boundary setup
-export AUTH_METHOD_ID="ampw_bT5tL9lq2E" 
+export AUTH_METHOD_ID="ampw_itLVtDbjHJ" 
 export SCOPE_ID="o_32uhtsgOm5"
-export PROJ_SCOPE="p_gO59FC9lGg"
+export PROJ_SCOPE="p_C36VKbloaD"
 export ADMIN_LOGIN_UID="admin"
 export BOUNDARY_ADDR="http://3.239.219.75:9200/"
 export BOUNDARY_PASSWORD="mypassword"
+export BOUNDARY_TLS_INSECURE=true
 # export CRED_STORE_ID="clvlt_dompUlx0HB"
-
-vault() {
-    docker exec -e VAULT_ADDR=http://127.0.0.1:8200 -e VAULT_TOKEN=myroot vault vault "$@"
-}
 
 addcacert() { # Add CA cert to Vault container (first run only)
     echo "Install The AD Self-Signed Certificate into Vault container"
+    scp -i "boundary.pem" /Users/jessica.ang/Library/CloudStorage/OneDrive-IBM/GitHub/demo/boundary/mini-boundary/SSL/ad-cert.cer ubuntu@3.208.87.161:/tmp/ad-cert.cer
     # convert cer to pem format
     openssl x509 -inform DER -in ad-cert.cer -out ad-cert.pem
-    docker cp /tmp/ad-cert.pem vault:/tmp/ad-cert.pem
+    sudo docker cp /tmp/ad-cert.pem vault:/tmp/ad-cert.pem
     # Method 1: Append the certificate to the CA bundle --> Get the self-sign cert from AD first
-    docker exec vault sh -c 'cat /tmp/ad-cert.pem >> /etc/ssl/certs/ca-certificates.crt'
+    sudo docker exec vault sh -c 'cat /tmp/ad-cert.pem >> /etc/ssl/certs/ca-certificates.crt'
 
     # Verify it was added
-    docker exec vault tail -20 /etc/ssl/certs/ca-certificates.crt
+    sudo docker exec vault tail -20 /etc/ssl/certs/ca-certificates.crt
 
     # Restart Vault
-    docker restart vault
+    sudo docker restart vault
 }
 
 ##### FOR TROUBLESHOOTING #####
 # Verify LDAP SEARCH work
-#LDAPTLS_REQCERT=never ldapsearch -x -H $LDAP_URL -D $LDAP_BIND_DN -w $LDAP_BIND_PASSWORD -b "DC=example,DC=local" "(objectClass=user)" cn
+#LDAPTLS_REQCERT=never ldapsearch -x -H $LDAP_URL -D $LDAP_BIND_DN -w $LDAP_BIND_PASSWORD -b "DC=lab,DC=com" "(objectClass=user)" dn
 
 # Validate LDIF syntax
 # LDAPTLS_REQCERT=never ldapmodify -H $LDAP_URL \
@@ -49,14 +45,14 @@ addcacert() { # Add CA cert to Vault container (first run only)
 #   -n
 
 # Check LDAP Group
-LDAPTLS_REQCERT=never ldapsearch -x -H $LDAP_URL -D $LDAP_BIND_DN -w $LDAP_BIND_PASSWORD \
-  -b "DC=example,DC=local" \
-  "(cn=NewGroup)" member
+# LDAPTLS_REQCERT=never ldapsearch -x -H $LDAP_URL -D $LDAP_BIND_DN -w $LDAP_BIND_PASSWORD \
+#   -b "DC=example,DC=local" \
+#   "(cn=NewGroup)" member
 
-LDAPTLS_REQCERT=never ldapsearch -x -H $LDAP_URL -D $LDAP_BIND_DN -w $LDAP_BIND_PASSWORD \
-  -b "DC=example,DC=local" \
-  "(objectClass=organizationalUnit)" \
-  dn
+# LDAPTLS_REQCERT=never ldapsearch -x -H $LDAP_URL -D $LDAP_BIND_DN -w $LDAP_BIND_PASSWORD \
+#   -b "DC=example,DC=local" \
+#   "(objectClass=organizationalUnit)" \
+#   dn
 ###############################
 
 # setup ldap secret engine in vault
@@ -74,7 +70,7 @@ setupldapsecretengine(){
         url="$LDAP_URL" \
         schema=ad \
         insecure_tls=true \
-        userdn="CN=Users,DC=example,DC=local"
+        userdn="$LDAP_USER_DN"
 
     echo "LDAP secrets engine configured successfully!"
 
@@ -181,30 +177,6 @@ EOF
 
 }
 
-setupvaultcredstore() {
-    # setup boundary target to use vault ldap dynamic credential
-    echo "setup boundary target to use vault ldap dynamic credential"
-
-    #authentication to boundary
-    export BOUNDARY_TOKEN=$(boundary authenticate password \
-        -auth-method-id="$AUTH_METHOD_ID" \
-        -login-name=$ADMIN_LOGIN_UID \
-        -password=env://BOUNDARY_PASSWORD \
-        -format json | jq  -r '.item.attributes.token')
-
-    #To add in script (currently done via console)
-
-    #2. Create Vault credential Store
-    #3. To create target
-
-   #create credential store
-#    boundary credential-libraries update vault-generic \
-#    -id $CRED_STORE_ID \
-#    -vault-http-method GET \
-#    -vault-path "ldap/creds/readonly" \
-#    -credential-mapping-override username_attribute=username \
-#    -credential-mapping-override password_attribute=password
-}
 
 setuprecording() {
     echo "setup session recording store"
@@ -231,11 +203,19 @@ setuprecording() {
     export ACCESS_KEY="1WRHOAAD7WH7U1PO89RS"
     export SECRET_KEY="6TInONmfHBA0T+pebGhmLrVKKmy1ahDWt4BsD0w1"
 
+    {
+ "status": "success",
+ "accessKey": "1WRHOAAD7WH7U1PO89RS",
+ "secretKey": "6TInONmfHBA0T+pebGhmLrVKKmy1ahDWt4BsD0w1",
+ "accountStatus": "enabled",
+ "expiration": "1970-01-01T00:00:00Z"
+}
+
     # Attach policy
     mc admin policy attach myminio readwrite --user boundary
 
     # Step 2: Create a new bucket named "boundary-recordings"
-    mc mb boundary/boundary-recordings
+    mc mb minioadmin/boundary-recordings
 
     # Test the new user
     mc alias set test-boundary http://localhost:9000 $ACCESS_KEY $SECRET_KEY
@@ -262,8 +242,12 @@ setuprecording() {
    -token env://BOUNDARY_TOKEN
     
 }
-#addcacert
-setupldapsecretengine
-setupldapauthengine
-#setupvaultcredstore
+
+setupvault
+# setupvaultcredstore
+# addcacert
+# setupldapsecretengine
+# setupldapauthengine
+# setupvaultcredstore
+# setuprecording
 

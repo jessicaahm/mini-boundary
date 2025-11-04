@@ -21,7 +21,7 @@ export AUTH_METHOD_NAME="password"
 export ADMIN_LOGIN_UID="admin"
 export ROLE_NAME="orgadmin"
 export ADMIN_LOGIN_PWD="mypassword"
-export VM_IP_ADDR="44.201.45.112"
+export VM_IP_ADDR="3.235.1.247"
 
 # Setup PostgresSQl Database
 setupdb() {
@@ -108,7 +108,7 @@ echo "Setting up Boundary Controller"
 # Copy license files to boundary for enterprise features
 docker cp /tmp/boundary.hclic vault:/tmp/boundary.hclic
 
-sudo cat << EOF > controller.hcl
+sudo cat << EOF > ./controller.hcl
     controller {
       name = "boundary-controller"
       description = "Demo Boundary Controller"
@@ -175,7 +175,7 @@ else
 fi
 
 # Bootstrap boundary controller
-cat << EOF > recovery.hcl
+cat << EOF > ./recovery.hcl
 kms "aead" {
   purpose = "recovery"
   aead_type = "aes-gcm"
