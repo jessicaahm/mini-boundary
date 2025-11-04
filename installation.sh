@@ -21,13 +21,13 @@ download_packages() {
     --no-conflicts --no-breaks --no-replaces --no-enhances \
     --no-pre-depends ${PACKAGES} | grep "^\w")
 
-    # sudo apt update
-    # sudo apt-get install ca-certificates gnupg -y
-    # sudo apt-get install docker.io -y
-    # sudo apt-get install postgresql-client-common -y
-    # sudo apt-get install postgresql-client -y
-    # sudo apt-get install ldap-utils -y
-    # sudo apt-get install unzip -y
+sudo apt update
+sudo apt-get install ca-certificates gnupg -y
+sudo apt-get install docker.io -y
+sudo apt-get install postgresql-client-common -y
+sudo apt-get install postgresql-client -y
+sudo apt-get install ldap-utils -y
+sudo apt-get install unzip -y
 
     echo "Downloading Boundary CLI..."
     BOUNDARY_VERSION="0.18.2"  # Update to desired version
@@ -80,10 +80,10 @@ install_packages() {
     cd ..
 
     echo "Loading Docker images..."
-    docker load -i ./offline-packages/vault.tar
-    docker load -i ./offline-packages/boundary.tar
-    docker load -i ./offline-packages/postgres.tar
-    docker load -i ./offline-packages/minio.tar
+    docker load -i ./vault.tar
+    docker load -i .//boundary.tar
+    docker load -i ./postgres.tar
+    docker load -i ./minio.tar
 
     echo "Adding current user to docker group..."
     sudo usermod -aG docker $USER
