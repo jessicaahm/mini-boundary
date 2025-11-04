@@ -6,3 +6,8 @@ README.md
 *.pem
 *.cer
 *.hclic
+boundary.sh
+OFFLINE/
+OPERATIONS/
+OPERATIONS/cisco
+SSL/
