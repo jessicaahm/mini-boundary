@@ -1,7 +1,6 @@
 #!/bin/bash
 
 export VAULT_ADDR=http://3.239.158.79:8200
-export VAULT_TOKEN="hvs.cmKKzJz4heI6yBoe8w7qs0mI"
 
 export TARGET_VM="44.203.31.9"
 
@@ -49,7 +48,7 @@ vault write ssh/roles/user -<<"EOH"
   },
   "key_type": "ca",
   "default_user": "ubuntu",
-  "ttl": "3m0s"
+  "ttl": "1m0s"
 }
 EOH
 
@@ -64,4 +63,4 @@ chmod 400 user-signed-cert.pub
 chmod 400 user
 ssh -i user ubuntu@${TARGET_VM}
 
-ssh -i user-cert.pub -i user ubuntu@44.203.31.9
+ssh -i user-signed-cert.pub -i user ubuntu@44.203.31.9
