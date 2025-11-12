@@ -11,3 +11,6 @@ OFFLINE/
 OPERATIONS/
 OPERATIONS/cisco
 SSL/
+minio-creds.json
+radar.sh
+*.hcl
