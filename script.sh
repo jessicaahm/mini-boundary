@@ -21,7 +21,8 @@ export AUTH_METHOD_NAME="password"
 export ADMIN_LOGIN_UID="admin"
 export ROLE_NAME="orgadmin"
 export ADMIN_LOGIN_PWD="mypassword"
-export VM_IP_ADDR="3.235.1.247"
+export VM_IP_ADDR="44.203.31.9"
+export BOUNDARY_PATH="/boundary"
 
 # Setup PostgresSQl Database
 setupdb() {
@@ -106,7 +107,7 @@ setupminio() {
 setupboundarycontroller() {
 echo "Setting up Boundary Controller"
 # Copy license files to boundary for enterprise features
-docker cp /tmp/boundary.hclic vault:/tmp/boundary.hclic
+# docker cp /boundary/boundary.hclic vault:/tmp/boundary.hclic
 
 sudo cat << EOF > ./controller.hcl
     controller {
@@ -115,7 +116,7 @@ sudo cat << EOF > ./controller.hcl
       database {
         url = "postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable"
       }
-      license = "file:///tmp/boundary.hclic"
+      license = "file:///boundary/boundary.hclic"
     }
 
     listener "tcp" {
@@ -197,7 +198,7 @@ docker run --rm \
   --network host \
   --cap-add IPC_LOCK \
   -v "$(pwd)/controller.hcl":/boundary/controller.hcl \
-  -v "/tmp/boundary.hclic":/tmp/boundary.hclic \
+  -v "$BOUNDARY_PATH"/boundary.hclic:/boundary/boundary.hclic:ro \
   -e "BOUNDARY_POSTGRES_URL=postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable" \
   hashicorp/boundary-enterprise:latest \
   boundary database init -config=/boundary/controller.hcl
@@ -209,7 +210,7 @@ docker run -d  \
   --cap-add IPC_LOCK \
   -v "$(pwd)/controller.hcl":/boundary/controller.hcl \
   -v "$(pwd)/recovery.hcl":/boundary/recovery.hcl \
-  -v "/tmp/boundary.hclic":/tmp/boundary.hclic \
+  -v "/boundary/boundary.hclic":/boundary/boundary.hclic \
   -e "BOUNDARY_POSTGRES_URL=postgresql://${PG_ADMIN_NAME}:${PG_ADMIN_PASSWORD}@localhost:${PG_PORT}/boundary?sslmode=disable" \
   -e "BOUNDARY_PASSWORD=$ADMIN_LOGIN_PWD" \
   hashicorp/boundary-enterprise:latest \
@@ -440,7 +441,7 @@ docker exec -e "WORKER_AUTH_TOKEN=$WORKER_AUTH_TOKEN" -e "BOUNDARY_TOKEN=$BOUNDA
 }
 
 setupdb
-setupminio
+#setupminio
 setupboundarycontroller
 initboundarycontroller
 setupboundaryworker

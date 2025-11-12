@@ -58,16 +58,43 @@ path "ldap/creds/readonly" {
 path "ssh/creds/otp_key_role" {
   capabilities = ["update","read","list"]
 }
-
-
 EOF
+
+vault policy write ssh -<<EOF
+path "ssh/issue/admin" {
+  capabilities = ["create", "update"]
+}
+
+path "ssh/sign/admin" {
+  capabilities = ["create", "update"]
+}
+
+path "ssh/issue/user" {
+  capabilities = ["create", "update"]
+}
+
+path "ssh/sign/user" {
+  capabilities = ["create", "update"]
+}
+EOF
+
 
 vault policy write boundary-controller boundary-controller-policy.hcl
 
 echo "Create token for integration"
-VAULT_CREDS_TOKEN=$(vault token create -period=30m -orphan -policy=boundary-controller -renewable=true -orphan=true -format=json | jq -r '.auth.client_token')
-echo "Token: $VAULT_CREDS_TOKEN"
-}
+# VAULT_CREDS_TOKEN=$(vault token create -period=30m -orphan -policy=boundary-controller -policy=ssh -renewable=true -orphan=true -format=json | jq -r '.auth.client_token')
+# echo "Token: $VAULT_CREDS_TOKEN"
+# }
+
+export VAULT_CREDS_TOKEN=$(vault token create \
+    -format=json \
+    -no-default-policy=true \
+    -policy="boundary-controller" \
+    -policy="ssh" \
+    -orphan=true \
+    -period=24h \
+    -renewable=true | \
+    jq -r '.auth.client_token')
 
 setupvaultcredstore() {
     # setup boundary target to use vault ldap dynamic credential
