@@ -21,7 +21,7 @@ export AUTH_METHOD_NAME="password"
 export ADMIN_LOGIN_UID="admin"
 export ROLE_NAME="orgadmin"
 export ADMIN_LOGIN_PWD="mypassword"
-export VM_IP_ADDR="44.203.31.9"
+export VM_IP_ADDR="3.83.21.218"
 export BOUNDARY_PATH="/boundary"
 
 # Setup PostgresSQl Database

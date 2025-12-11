@@ -1,4 +1,4 @@
-# Welcome to demo
+# SSH secret engine demo
 
 Vault:
 
@@ -40,7 +40,7 @@ chmod 600 /tmp/demo/id_rsa-issue-cert.pub
 ssh-keygen -L -f /tmp/demo/signed-cert-issue.pub
 ```
 
-```sh {"terminalRows":"25"}
+```sh {"terminalRows":"32"}
 ssh -vvv -i /tmp/demo/id_rsa-issue-cert.pub -i /tmp/demo/id_rsa-issue ubuntu@$TARGET
 ```
 

@@ -2,8 +2,8 @@
 # This need Vault CLI installed
 
 # Vault Setup
-export VM_IP_ADDR="3.239.158.79"
-export VM_PRIVATE_IP_ADDR="10.0.1.189"
+export VM_IP_ADDR="18.140.242.240"
+export VM_PRIVATE_IP_ADDR="10.0.1.196"
 export VAULT_PATH="/vault"
 export PRI_ADDR="http://$VM_PRIVATE_IP_ADDR:8200"
 
