@@ -1,0 +1,273 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "ff6qtijea6hhcc"
+      },
+      "description": "Identify any specific IP that hit especially high authentication failure",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "ff6qtijea6hhcc"
+          },
+          "dimensions": {},
+          "expression": "fields @timestamp, @message\n| filter @message like /error/ or @message like /\"allowed\":false/\n| parse @message '\"remote_address\":\"*\"' as source_ip\n| stats count(*) as failed_attempts by source_ip, bin(5m)\n| sort @timestamp asc",
+          "id": "",
+          "label": "",
+          "logGroups": [
+            {
+              "accountId": "034362039150",
+              "arn": "arn:aws:logs:us-east-1:034362039150:log-group:hashicorp/07b1c922-98aa-475a-b5f5-7f403bf66a9d/85352a1a-b6f3-4089-ab3b-8fc46896e3bd:*",
+              "name": "hashicorp/07b1c922-98aa-475a-b5f5-7f403bf66a9d/85352a1a-b6f3-4089-ab3b-8fc46896e3bd"
+            }
+          ],
+          "matchExact": true,
+          "metricEditorMode": 1,
+          "metricName": "",
+          "metricQueryType": 0,
+          "namespace": "",
+          "period": "",
+          "queryLanguage": "CWLI",
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "sqlExpression": "",
+          "statistic": "Average",
+          "statsGroups": [
+            "source_ip",
+            "bin(5m)"
+          ]
+        }
+      ],
+      "title": "Authentication Failure Trends",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "cloudwatch",
+        "uid": "ff6qtijea6hhcc"
+      },
+      "description": "If a specific source_ip hit a high failed_attempts <threshold> across multiple vault_path, this could be a brute force attempt",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "18.143.64.30 source_ip"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 181
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "18.143.64.30 failed_attempts"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 212
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "cellHeight": "sm",
+        "frameIndex": 1,
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "12.3.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "cloudwatch",
+            "uid": "ff6qtijea6hhcc"
+          },
+          "dimensions": {},
+          "expression": "fields @timestamp, @message\n| filter @message like /error/ or @message like /\"allowed\":false/\n| parse @message '\"remote_address\":\"*\"' as source_ip\n| parse @message '\"display_name\":\"*\"' as user\n| parse @message '\"path\":\"*\"' as vault_path\n| stats count(*) as failed_attempts by source_ip, vault_path\n| sort @failed_attempts desc",
+          "id": "",
+          "label": "",
+          "logGroups": [
+            {
+              "accountId": "034362039150",
+              "arn": "arn:aws:logs:us-east-1:034362039150:log-group:hashicorp/07b1c922-98aa-475a-b5f5-7f403bf66a9d/85352a1a-b6f3-4089-ab3b-8fc46896e3bd:*",
+              "name": "hashicorp/07b1c922-98aa-475a-b5f5-7f403bf66a9d/85352a1a-b6f3-4089-ab3b-8fc46896e3bd"
+            }
+          ],
+          "matchExact": true,
+          "metricEditorMode": 1,
+          "metricName": "",
+          "metricQueryType": 0,
+          "namespace": "",
+          "period": "",
+          "queryLanguage": "CWLI",
+          "queryMode": "Logs",
+          "refId": "A",
+          "region": "default",
+          "sqlExpression": "",
+          "statistic": "Average",
+          "statsGroups": [
+            "source_ip",
+            "vault_path"
+          ]
+        }
+      ],
+      "title": "Top Authentication Failure By IP and Auth Methods",
+      "type": "table"
+    }
+  ],
+  "preload": false,
+  "schemaVersion": 42,
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Vault Sample Audit Logs IOC",
+  "uid": "adxbxs8",
+  "version": 6
+}

@@ -171,20 +171,56 @@
             "type": "cloudwatch",
             "uid": "ff6qtijea6hhcc"
           },
-          "dimensions": {
-            "cluster_id": "$cluster_id"
-          },
+          "dimensions": {},
           "expression": "",
           "id": "",
+          "label": "Identity Entities",
+          "logGroups": [],
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "vault_identity_entity_count",
-          "metricQueryType": 0,
-          "namespace": "${namespace}",
+          "metricQueryType": 1,
+          "namespace": "hcp",
           "period": "",
+          "queryMode": "Metrics",
           "refId": "A",
-          "region": "$region",
-          "sqlExpression": "",
+          "region": "default",
+          "sql": {
+            "from": {
+              "property": {
+                "name": "hcp",
+                "type": "string"
+              },
+              "type": "property"
+            },
+            "select": {
+              "name": "AVG",
+              "parameters": [
+                {
+                  "name": "vault_identity_entity_count",
+                  "type": "functionParameter"
+                }
+              ],
+              "type": "function"
+            },
+            "where": {
+              "expressions": [
+                {
+                  "operator": {
+                    "name": "=",
+                    "value": "vault-cluster-prod"
+                  },
+                  "property": {
+                    "name": "cluster_id",
+                    "type": "string"
+                  },
+                  "type": "operator"
+                }
+              ],
+              "type": "and"
+            }
+          },
+          "sqlExpression": "SELECT AVG(vault_identity_entity_count) FROM hcp WHERE cluster_id = 'vault-cluster-prod'",
           "statistic": "Average"
         }
       ],
@@ -257,19 +293,40 @@
             "uid": "ff6qtijea6hhcc"
           },
           "dimensions": {
-            "cluster_id": "$cluster_id"
+            "cluster_id": "vault-cluster-prod"
           },
           "expression": "",
           "id": "",
+          "label": "Active Leases",
           "matchExact": true,
           "metricEditorMode": 0,
-          "metricName": "vault_expire_num_leases",
-          "metricQueryType": 0,
-          "namespace": "${namespace}",
+          "metricName": "vault.expire.num_leases",
+          "metricQueryType": 1,
+          "namespace": "hcp",
           "period": "",
+          "queryMode": "Metrics",
           "refId": "A",
           "region": "$region",
-          "sqlExpression": "",
+          "sql": {
+            "from": {
+              "property": {
+                "name": "hcp",
+                "type": "string"
+              },
+              "type": "property"
+            },
+            "select": {
+              "name": "AVG",
+              "parameters": [
+                {
+                  "name": "vault.expire.num_leases",
+                  "type": "functionParameter"
+                }
+              ],
+              "type": "function"
+            }
+          },
+          "sqlExpression": "SELECT AVG(\"vault.expire.num_leases\") FROM hcp",
           "statistic": "Average"
         }
       ],
@@ -338,13 +395,48 @@
           "matchExact": true,
           "metricEditorMode": 0,
           "metricName": "vault_token_creation",
-          "metricQueryType": 0,
+          "metricQueryType": 1,
           "namespace": "hcp",
           "period": "",
           "queryMode": "Metrics",
           "refId": "A",
           "region": "$region",
-          "sqlExpression": "",
+          "sql": {
+            "from": {
+              "property": {
+                "name": "hcp",
+                "type": "string"
+              },
+              "type": "property"
+            },
+            "select": {
+              "name": "AVG",
+              "parameters": [
+                {
+                  "name": "vault_token_creation",
+                  "type": "functionParameter"
+                }
+              ],
+              "type": "function"
+            },
+            "where": {
+              "expressions": [
+                {
+                  "operator": {
+                    "name": "=",
+                    "value": "vault-cluster-prod"
+                  },
+                  "property": {
+                    "name": "cluster_id",
+                    "type": "string"
+                  },
+                  "type": "operator"
+                }
+              ],
+              "type": "and"
+            }
+          },
+          "sqlExpression": "SELECT AVG(vault_token_creation) FROM hcp WHERE cluster_id = 'vault-cluster-prod'",
           "statistic": "Average"
         }
       ],
@@ -1985,5 +2077,5 @@
   "timezone": "",
   "title": "HCP Vault - CloudWatch",
   "uid": "hcp-vault-cloudwatch",
-  "version": 3
+  "version": 7
 }
